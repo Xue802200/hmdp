@@ -8,5 +8,8 @@ public class SystemConstants {
     public static final String SESSION_USER = "user";
     public static final String CODE_ERROR = "输入的验证码有误";
     public static final String PHONE_ERROR = "输入的手机号有误";
+    public static final String SHOP_NOT_EXIST = "找不到当前商品";
+    public static final String SHOPTYPE_NOT_EXIST = "找不到当前商家种类";
+
 
 }
