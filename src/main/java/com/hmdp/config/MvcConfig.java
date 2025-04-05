@@ -20,15 +20,13 @@ public class MvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new LoginInterceptor(stringRedisTemplate))
                 .excludePathPatterns(
-                      "/user/login",
+                      "/shop/**",
+                      "/voucher/**",
+                      "/shop-type/**",
+                      "/upload/**",
+                      "/blog/hot",
                       "/user/code",
-                        "user/me",
-                        "/upload/**",
-                       "/shop-type/**",
-                       "/blog/**",
-                        "/blog-comments/**",
-                        "/voucher/**",
-                        "/voucher-order/**"
+                      "/user/login"
                 );
     }
 }

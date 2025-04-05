@@ -1,12 +1,15 @@
 package com.hmdp.controller;
 
 
+import cn.hutool.core.bean.BeanUtil;
 import com.hmdp.dto.LoginFormDTO;
 import com.hmdp.dto.Result;
+import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.UserInfo;
 import com.hmdp.service.IUserInfoService;
 import com.hmdp.service.IUserService;
 import com.hmdp.constant.RedisConstants;
+import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -72,9 +75,8 @@ public class UserController {
      */
     @GetMapping("/me")
     public Result me(){
-        //返回用户信息
-        Map<Object, Object> user = stringRedisTemplate.opsForHash().entries(RedisConstants.LOGIN_USER_KEY);
-        return Result.ok(user);
+        //将当前用户信息返回
+        return Result.ok(UserHolder.getUser());
     }
 
     @GetMapping("/info/{id}")

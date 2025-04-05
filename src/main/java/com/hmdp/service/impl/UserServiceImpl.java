@@ -1,6 +1,7 @@
 package com.hmdp.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.RandomUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -88,10 +89,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
 
         //6.2将这个dto转化为对应的map存储到redis中
-        Map<String, Object> userMap = new HashMap<>();
-        userMap.put("id", userDTO.getId().toString());
+        Map<String, String> userMap = new HashMap<>();
+        userMap.put("id", String.valueOf(user.getId()));
         userMap.put("nickName", userDTO.getNickName());
         userMap.put("icon", userDTO.getIcon());
+//
+//        Map<String,Object> userMap = BeanUtil.beanToMap(userDTO,new HashMap<>(),
+//                CopyOptions.create()
+//                        .setIgnoreNullValue(true)
+//                        .setFieldValueEditor((fieldName,fieldValue) -> fieldValue.toString()));
 
         //6.3生成一个随机的token作为redis中的key,并设置有效期
         String token = UUID.randomUUID().toString(true);
