@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
 public class ShopTypeServiceImpl extends ServiceImpl<ShopTypeMapper, ShopType> implements IShopTypeService {
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 查询商家类型
@@ -39,41 +41,40 @@ public class ShopTypeServiceImpl extends ServiceImpl<ShopTypeMapper, ShopType> i
      */
     @Override
     public Result queryList() {
-        //1.先去缓存当中查找
-        String shoptypeJSON = stringRedisTemplate.opsForValue().get(RedisConstants.SHOPTYPE_KEY);
+        //1.先去缓存当中查找是否有数据
+        List<String> shopTypeListJSON = stringRedisTemplate.opsForList().range(RedisConstants.SHOPTYPE_KEY, 0, -1);
 
-        //2.如果缓存当中有数据,则直接返回
-        if(StrUtil.isNotBlank(shoptypeJSON)){
-            //将字符串反序列化为对应的集合类型
-            List<ShopType>  shopTypeList = JSON.parseArray(shoptypeJSON,ShopType.class);
-            return Result.ok(shopTypeList);
+        //2.如果有数据,则直接返回
+        if(shopTypeListJSON !=null && !shopTypeListJSON.isEmpty()){
+            try {
+                List<ShopType> result = new ArrayList<>();
+                for (String json : shopTypeListJSON) {
+                    ShopType shopType = objectMapper.readValue(json, ShopType.class);
+                    result.add(shopType);
+                }
+                return Result.ok(result);
+
+            } catch (Exception e) {
+                System.out.println("反序列化失败");
+            }
         }
 
-        //3.如果缓存当中没有数据,去数据库中查询
+        //3.如果没有数据,则去数据库中查找
         List<ShopType> shopTypeList = query().orderByAsc("sort").list();
 
-        //4.数据库中没有数据,则返回错误信息
-        if ( shopTypeList == null || shopTypeList.isEmpty()){
+        //4.如果数据库中的数据为空,则直接抛出错误
+        if(shopTypeList == null || shopTypeList.isEmpty()){
             return Result.fail(SystemConstants.SHOPTYPE_NOT_EXIST);
         }
 
-        //5.数据库中有数据,则将当前数据添加到缓存当中  序列化为JSON并存入Redis List
-        try {
-            // 5.1 将List<ShopType>转为JSON字符串列表
-            List<String> jsonList = shopTypeList.stream()
-                    .map(shopType -> JSON.toJSONString(shopType))
-                    .collect(Collectors.toList());
+        //5.不为空,则将对象序列化后添加到redis当中
+        String jsonString = JSON.toJSONString(shopTypeList);
+        stringRedisTemplate.opsForList().rightPush(RedisConstants.SHOPTYPE_KEY, jsonString);
 
-            // 5.2 批量插入到Redis List（使用rightPushAll）
-            stringRedisTemplate.opsForList().rightPushAll(
-                    RedisConstants.SHOPTYPE_KEY,
-                    jsonList  // 直接传入List<String>
-            );
-        } catch (Exception e) {
-            log.error("缓存店铺类型失败", e);
-        }
+        //6.为了避免缓存穿透的问题,设置缓存有效期为一天
+        stringRedisTemplate.expire(RedisConstants.SHOPTYPE_KEY,RedisConstants.SHOPTYPE_TTL,TimeUnit.DAYS);
 
-        //6.返回当前集合对象
+        //6.返回当前对象
         return Result.ok(shopTypeList);
     }
 }

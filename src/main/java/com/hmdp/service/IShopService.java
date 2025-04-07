@@ -1,6 +1,7 @@
 package com.hmdp.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.baomidou.mybatisplus.extension.service.IService;
 
@@ -14,5 +15,12 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface IShopService extends IService<Shop> {
 
-    Object queryById(Long id) throws JsonProcessingException;
+    Result queryById(Long id) throws JsonProcessingException;
+
+    /**
+     * 更新商铺信息
+     * @param shop  更新后的商铺信息
+     * @return
+     */
+    Result update(Shop shop);
 }

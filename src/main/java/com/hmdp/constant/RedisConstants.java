@@ -9,9 +9,14 @@ public class RedisConstants {
 
 
    public static final String SHOP_KEY = "cache:shop:";
+   public static final Long SHOP_TTL =  30L;
+   public static final Long SHOP_NULL_TTL =  3L;
+
 
 
    public static final String SHOPTYPE_KEY = "shoptype:";
+   public static final Long SHOPTYPE_TTL = 1L;
+
 
 
 
