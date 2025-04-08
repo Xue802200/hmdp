@@ -42,7 +42,7 @@ public class ShopTypeServiceImpl extends ServiceImpl<ShopTypeMapper, ShopType> i
     @Override
     public Result queryList() {
         //1.先去缓存当中查找是否有数据
-        String shopTypeJSON = stringRedisTemplate.opsForValue().get(RedisConstants.SHOPTYPE_KEY);
+        String shopTypeJSON = stringRedisTemplate.opsForValue().get(RedisConstants.CACHE_SHOPTYPE_KEY);
 
         //2.如果有数据,则直接返回
         if (shopTypeJSON != null && !shopTypeJSON.isEmpty()) {
@@ -67,10 +67,10 @@ public class ShopTypeServiceImpl extends ServiceImpl<ShopTypeMapper, ShopType> i
         }
 
         //5.不为空,则将对象序列化后添加到redis当中
-        stringRedisTemplate.opsForValue().set(RedisConstants.SHOPTYPE_KEY, JSON.toJSONString(shopTypeList));
+        stringRedisTemplate.opsForValue().set(RedisConstants.CACHE_SHOPTYPE_KEY, JSON.toJSONString(shopTypeList));
 
         //6.为了避免缓存穿透的问题,设置缓存有效期为一天
-        stringRedisTemplate.expire(RedisConstants.SHOPTYPE_KEY,RedisConstants.SHOPTYPE_TTL,TimeUnit.DAYS);
+        stringRedisTemplate.expire(RedisConstants.CACHE_SHOPTYPE_KEY,RedisConstants.CACHE_SHOPTYPE_TTL,TimeUnit.DAYS);
 
         //6.返回当前对象
         return Result.ok(shopTypeList);

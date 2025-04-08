@@ -12,12 +12,14 @@ import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.RedisClient;
 import com.hmdp.utils.RedisData;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.annotation.Resource;
 import java.time.LocalDateTime;
 import java.time.temporal.TemporalUnit;
 import java.util.concurrent.ExecutorService;
@@ -34,8 +36,10 @@ import java.util.concurrent.TimeUnit;
  */
 @Service
 public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IShopService {
-    @Autowired
+    @Resource
     private StringRedisTemplate stringRedisTemplate;
+    @Resource
+    private RedisClient redisClient;
     //自定义线程池
     private static final ExecutorService CACHE_REBUILD_EXECUTOR = Executors.newFixedThreadPool(10);
 
@@ -49,10 +53,17 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 //        //解决缓存穿透的方案
 //        Shop shop = getShopWithCachePenetration(id);
 
-//        //解决缓存击穿的方案
+//        //解决缓存击穿的方案->通过互斥锁
 //        Shop shop = getShopWithCacheBreakDown(id);
 
-        Shop shop = getShopWithCacheBreakDown2(id);
+        //解决缓存击穿的方案 -> 通过逻辑过期
+        //Shop shop = getShopWithCacheBreakDown2(id);
+//
+//        //自定义工具类实现
+//        Shop shop = redisClient.queryWithPassThrough(RedisConstants.CACHE_SHOP_KEY, id, Shop.class,
+//                this::getById, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+
+        Shop shop = redisClient.queryWithLogicalExpire(RedisConstants.CACHE_SHOP_KEY, id, Shop.class, this::getById, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
 
         if(shop == null){
             return Result.fail(SystemConstants.SHOP_NOT_EXIST);
@@ -76,7 +87,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         updateById(shop);
 
         //2.在删除缓存
-        stringRedisTemplate.delete(RedisConstants.SHOP_KEY + shop.getId());
+        stringRedisTemplate.delete(RedisConstants.CACHE_SHOP_KEY + shop.getId());
 
         return Result.ok(shop);
     }
@@ -134,7 +145,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 //        String shopMysqlJSON = JSON.toJSONString(shop);
 //
 //        //5.2将序列化后的数据添加到redis中
-//        stringRedisTemplate.opsForValue().set(RedisConstants.SHOP_KEY + id ,shopMysqlJSON , RedisConstants.SHOP_TTL , TimeUnit.MINUTES);
+//        stringRedisTemplate.opsForValue().set(RedisConstants.CACHE_SHOP_KEY + id ,shopMysqlJSON , RedisConstants.CACHE_SHOP_TTL , TimeUnit.MINUTES);
 //
 //        //6.返回当前商品信息
 //        return shop;
@@ -145,7 +156,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
      */
     public Shop getShopWithCacheBreakDown(Long id){
         //1.先根据商品id去缓存当中查询
-        String shopJSON = stringRedisTemplate.opsForValue().get(RedisConstants.SHOP_KEY + id);  //得到shop对象的序列化数据
+        String shopJSON = stringRedisTemplate.opsForValue().get(RedisConstants.CACHE_SHOP_KEY + id);  //得到shop对象的序列化数据
 
         //2.1 如果缓存中存在且为非空,则直接将这个信息返回
         if(StrUtil.isNotBlank(shopJSON)){
@@ -175,7 +186,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             Thread.sleep(200); //模拟高并发造成的问题
             //6.数据库当中的数据不存在,将一个空值存入到redis当中
             if( shop == null){
-                stringRedisTemplate.opsForValue().set(RedisConstants.SHOP_KEY + id ,"", RedisConstants.SHOP_NULL_TTL , TimeUnit.MINUTES);
+                stringRedisTemplate.opsForValue().set(RedisConstants.CACHE_SHOP_KEY + id ,"", RedisConstants.CACHE_NULL_TTL , TimeUnit.MINUTES);
                 return null;
             }
 
@@ -184,7 +195,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             String shopMysqlJSON = JSON.toJSONString(shop);
 
             //5.2将序列化后的数据添加到redis中
-            stringRedisTemplate.opsForValue().set(RedisConstants.SHOP_KEY + id ,shopMysqlJSON , RedisConstants.SHOP_TTL , TimeUnit.MINUTES);
+            stringRedisTemplate.opsForValue().set(RedisConstants.CACHE_SHOP_KEY + id ,shopMysqlJSON , RedisConstants.CACHE_SHOP_TTL , TimeUnit.MINUTES);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         } finally {
@@ -204,7 +215,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
      */
     public Shop getShopWithCacheBreakDown2(Long id){
         //1.先从缓存中查找数据
-        String shopJSON = stringRedisTemplate.opsForValue().get(RedisConstants.SHOP_KEY + id);
+        String shopJSON = stringRedisTemplate.opsForValue().get(RedisConstants.CACHE_SHOP_KEY + id);
 
         //判断缓存是否命中
         if(StrUtil.isBlank(shopJSON)){
@@ -227,7 +238,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             //6.获取到互斥锁了,此时需要再对缓存中是否有数据进行判断
             //6.1 如果缓存中有数据直接返回
             if(judgeIfCacheExist(id)){
-                return JSON.parseObject(stringRedisTemplate.opsForValue().get(RedisConstants.SHOP_KEY + id),Shop.class);
+                return JSON.parseObject(stringRedisTemplate.opsForValue().get(RedisConstants.CACHE_SHOP_KEY + id),Shop.class);
             }
             try {
                 //6.2缓存中没有数据再执行缓存重建的操作,开启独立线程,在独立线程中执行缓存重建的操作
@@ -259,14 +270,14 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         redisData.setExpireTime(LocalDateTime.now().plusSeconds(expireSeconds));
 
         //3.写入redis当中
-        stringRedisTemplate.opsForValue().set(RedisConstants.SHOP_KEY + id,JSON.toJSONString(redisData));
+        stringRedisTemplate.opsForValue().set(RedisConstants.CACHE_SHOP_KEY + id,JSON.toJSONString(redisData));
     }
 
     /*
     判断缓存是否存在
      */
     public boolean judgeIfCacheExist(Long id){
-        String shopJson = stringRedisTemplate.opsForValue().get(RedisConstants.SHOP_KEY + id);
+        String shopJson = stringRedisTemplate.opsForValue().get(RedisConstants.CACHE_SHOP_KEY + id);
         if(StrUtil.isBlank(shopJson)){
             //不存在,返回false
             return false;
