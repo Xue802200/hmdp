@@ -10,8 +10,10 @@ public class RedisConstants {
 
    public static final String SHOP_KEY = "cache:shop:";
    public static final Long SHOP_TTL =  30L;
-   public static final Long SHOP_NULL_TTL =  3L;
+   public static final Long SHOP_NULL_TTL =  3L;   //解决缓存穿透,写入缓存的null值有效时长
 
+   public static final String LOCK_SHOP_KEY = "lock:shop:";
+   public static final Long LOCK_SHOP_TTL =  10L;
 
 
    public static final String SHOPTYPE_KEY = "shoptype:";
