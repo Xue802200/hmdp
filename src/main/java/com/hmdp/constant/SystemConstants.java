@@ -12,5 +12,10 @@ public class SystemConstants {
     public static final String SHOPTYPE_NOT_EXIST = "找不到当前商家种类";
     public static final String SHOPID_NOT_EXIST = "商铺id不能为空";
 
+    public static final String Seckill_NOT_BEGIN = "秒杀尚未开始";
+    public static final String Seckill_END = "秒杀已经结束";
+    public static final String Seckill_OUT_COUNT = "秒杀券已售空";
+    public static final String Seckill_CANNOT_BUY = "秒杀券已经购买过,不可再次购买";
+
 
 }
