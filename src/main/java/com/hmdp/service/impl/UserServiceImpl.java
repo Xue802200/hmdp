@@ -49,7 +49,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         //3.合法,生成一个短信验证码
         String code = RandomUtil.randomNumbers(6);
 
-        //4.保存到session当中并设置两分钟的有效期
+        //4.保存到redis当中并设置两分钟的有效期
         stringRedisTemplate.opsForValue().set(RedisConstants.LOGIN_CODE_KEY + phone, code,RedisConstants.LOGIN_CODE_TTL, TimeUnit.MINUTES);
 
         //5.发送验证码

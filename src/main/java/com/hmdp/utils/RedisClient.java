@@ -1,8 +1,12 @@
 package com.hmdp.utils;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import com.alibaba.fastjson.JSON;
+import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.hmdp.constant.RedisConstants;
 import com.hmdp.entity.Shop;
 import lombok.extern.slf4j.Slf4j;
@@ -39,7 +43,7 @@ public class RedisClient {
     }
 
     /**
-     * 将任意java对象存入到redis中,并且可以设置逻辑过期时间,解决缓存击穿问题
+     * 将任意java对象存入到redis中,并且可以设置逻辑过期时间
      * @param key       存入redis的key名称
      * @param value     存入的值
      * @param ttl       设置过期的时间
@@ -95,68 +99,74 @@ public class RedisClient {
         return result;
     }
 
-    /*
-    利用逻辑过期解决缓存击穿的问题
+    /**
+     * 利用逻辑过期解决缓存击穿的问题
+     * @param keyPrefix   缓存的前缀名
+     * @param id          查找物品的id
+     * @param type        返回值的类型
+     * @param ttl         逻辑过期时间
+     * @param timeUnit    过期时间单位
+     * @return            查找商品的信息
      */
-    public <R,T> R queryWithLogicalExpire(String keyPrefix, T id, Class<R> type, Function<T,R> dbFallBack,Long ttl, TimeUnit timeUnit){
-        //1.在缓存中查找数据
+    public <R,T> R queryWithLogicalExpire(String keyPrefix, T id,Class<R> type,Function<T,R> dbFallBack,Long ttl, TimeUnit timeUnit){
+        //1.先根据key的全名称在缓存中查找
         String key = keyPrefix + id;
         String json = stringRedisTemplate.opsForValue().get(key);
 
-        //2.如果缓存未命中,返回null
+        //2.缓存中不存在,直接返回空
         if(StrUtil.isBlank(json)){
             return null;
         }
 
-        //3.如果缓存命中,判断逻辑时间是否过期
-        RedisData redisData = JSON.parseObject(json, RedisData.class); //先转为RedisData对象
-        LocalDateTime expireTime = redisData.getExpireTime();
-        R result = JSON.parseObject(redisData.getData().toString(), type);
+        //3.缓存中存在,进行反序列化
+        RedisData redisData = JSON.parseObject(json, RedisData.class);
+        Object data =  redisData.getData();
+        R result = JSON.parseObject(json, type);                           //存储的object属性
+        LocalDateTime expireTime = redisData.getExpireTime();              //逻辑过期时间
 
-        //4.如果逻辑没有超时,则直接将旧数据返回
-        if(expireTime.isAfter(LocalDateTime.now())){
+        //4.如果没有逻辑过期,直接返回
+        if(LocalDateTime.now().isAfter(expireTime)){
             return result;
         }
 
-        String lockKey = RedisConstants.LOCK_SHOP_KEY + id;
-        //5.如果逻辑没有过期,则去更新逻辑失效时间,首先需要获取互斥锁
-        if(lock(lockKey)){
-            //6.获取到锁,进行缓存重建
-            R apply = dbFallBack.apply(id);
+        //5.如果逻辑过期了,则进行更新过期时间的操作
+        //获取互斥锁
+        boolean lockResult = tryLock(key);
+        if(lockResult){
             try {
-                //6.2缓存中没有数据再执行缓存重建的操作,开启独立线程,在独立线程中执行缓存重建的操作
-                CACHE_REBUILD_EXECUTOR.submit(()->{
-                   this.setWithLogicalExpire(key,apply,ttl,timeUnit);
+                //获取锁成功,新建线程去执行更新的操作
+                CACHE_REBUILD_EXECUTOR.submit(() ->{
+                    R apply = dbFallBack.apply(id);
+                    setWithLogicalExpire(key,apply,ttl,timeUnit);
                 });
             } catch (Exception e) {
                 throw new RuntimeException(e);
             } finally {
-                //6.3释放锁
-                unlockShop(key);
+                //释放锁
+                unLock(key);
             }
         }
 
-        //7.直接返回旧数据
+        //返回旧数据
         return result;
     }
 
-    /*
-   模拟上互斥锁的过程,拿到互斥锁则返回true,否则返回false
-    */
-    public boolean lock(String key){
-        //判断是否能够插入数据,如果为true,则说明已经拿到锁了可以进行操作,false则说明未拿到锁
-        Boolean result = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", RedisConstants.LOCK_SHOP_TTL, TimeUnit.SECONDS);
+    /**
+     * 获取互斥锁
+     * @param key   key的名称
+     * @return      是否获取到
+     */
+    private boolean tryLock(String key){
+        Boolean result = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", RedisConstants.CACHE_NULL_TTL, TimeUnit.SECONDS);
 
-        //避免拆箱所导致的空指针问题
         return BooleanUtil.isTrue(result);
     }
 
-    /*
-    模拟释放锁的过程,即将原来的key给删除即可
+    /**
+     * 释放锁
+     * @param key   key的名称
      */
-    public void unlockShop(String key){
+    private void unLock(String key){
         stringRedisTemplate.delete(key);
     }
-
-
 }
