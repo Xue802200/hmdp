@@ -2,6 +2,7 @@ package com.hmdp.service.impl;
 
 import com.baomidou.mybatisplus.extension.conditions.query.QueryChainWrapper;
 import com.baomidou.mybatisplus.extension.conditions.update.UpdateChainWrapper;
+import com.hmdp.config.RedissonConfig;
 import com.hmdp.constant.SystemConstants;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.SeckillVoucher;
@@ -12,9 +13,12 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.service.IVoucherService;
+import com.hmdp.utils.RedisClient;
 import com.hmdp.utils.RedisIdWorker;
 import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -39,9 +43,11 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private ISeckillVoucherService seckillVoucherService;
     @Resource
-    private RedisIdWorker redisIdWorker;
+    private RedisIdWorker redisIdWorker;    //全局id生成器生成订单id
+    @Resource
+    private RedissonClient redissonClient; //Redisson的依赖注入
 
-    private static final String keyPrefix = "secKill";
+    private static final String keyPrefix = "secKill:";
 
     /*
     用户进行下单秒杀
@@ -73,11 +79,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         Long userId = UserHolder.getUser().getId();
 
         //创建分布式锁对象
-        SimpleRedisLock simpleRedisLock = new SimpleRedisLock(keyPrefix + userId, stringRedisTemplate);
-
+//      SimpleRedisLock simpleRedisLock = new SimpleRedisLock(keyPrefix + userId, stringRedisTemplate);
+        RLock lock = redissonClient.getLock("lock:" + keyPrefix + userId);
 
         //获取锁
-        boolean result = simpleRedisLock.tryLock(20L);
+//      boolean result = simpleRedisLock.tryLock(20L);
+        //尝试获取锁,waitTime: -1   锁自动释放时间:30s   TimeUnit默认:Seconds
+        boolean result = lock.tryLock();
 
         //没拿到锁,直接报错即可
         if(!result){
@@ -90,7 +98,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return currentProxy.createVoucherOrder(voucherId);
         } finally {
             //释放锁
-            simpleRedisLock.unLock();
+            lock.unlock();
         }
 
     }
