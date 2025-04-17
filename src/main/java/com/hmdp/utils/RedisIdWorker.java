@@ -32,7 +32,7 @@ public class RedisIdWorker {
     }
 
     /*
-    根据前缀来创建全局id
+    根据前缀来创建全局id   icr:keyPrefix:
     */
     public long createId(String keyPrefix) {
         //1.生成时间戳
@@ -48,6 +48,7 @@ public class RedisIdWorker {
         //2.3格式化为指定形式
         String format = formatter.format(nowDay);
 
+        //number用来表示是当天第多少个订单
         long number = stringRedisTemplate.opsForValue().increment("icr:" + keyPrefix + ":" + format);
 
 
