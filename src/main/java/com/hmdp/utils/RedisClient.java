@@ -121,7 +121,10 @@ public class RedisClient {
         //3.缓存中存在,进行反序列化
         RedisData redisData = JSON.parseObject(json, RedisData.class);
         Object data =  redisData.getData();
-        R result = JSON.parseObject(json, type);                           //存储的object属性
+
+        String jsonString = JSON.toJSONString(data);
+        R result = JSON.parseObject(jsonString, type);                      //存储的object属性
+
         LocalDateTime expireTime = redisData.getExpireTime();              //逻辑过期时间
 
         //4.如果没有逻辑过期,直接返回

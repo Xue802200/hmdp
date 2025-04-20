@@ -1,6 +1,7 @@
 package com.hmdp.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.SeckillVoucher;
 import com.hmdp.entity.VoucherOrder;
@@ -52,7 +53,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         REDIS_SCRIPT.setLocation(new ClassPathResource("seckillOrder.lua"));
         REDIS_SCRIPT.setResultType(Long.class);
     }
-
+    
 
    /*
    保证从阻塞队列中拿取信息的操作在这个对象被创建时就执行了
