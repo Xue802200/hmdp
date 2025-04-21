@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hmdp.constant.RedisConstants;
 import com.hmdp.constant.SystemConstants;
 import com.hmdp.dto.Result;
+import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Blog;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.BlogMapper;
@@ -18,7 +19,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * <p>
@@ -64,6 +69,29 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         return Result.ok(records);
     }
 
+
+    /*
+    查询博客是否被点赞
+     */
+    private void isBlockLiked(Blog blog) {
+        //获取博客id,userId
+        Long id = blog.getId();
+        UserDTO userDTO = UserHolder.getUser();
+
+        if(userDTO == null){
+            return;
+        }
+        Long userId = UserHolder.getUser().getId();
+
+        //判断当前用户是否点赞过
+        Double isLiked = stringRedisTemplate.opsForZSet().score(RedisConstants.LIKE_BLOG_KEY + id, userId.toString());
+
+        //点赞过则将属性设置为true
+        if(isLiked != null){
+            blog.setIsLike(true);
+        }
+    }
+
     /**
      * 查看笔记的详细信息
      * @param id  笔记的id
@@ -91,23 +119,10 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         return Result.ok(blog);
     }
 
+
     /*
-    查询博客是否被点赞
+    对博客进行点赞
      */
-    private void isBlockLiked(Blog blog) {
-        //获取博客id,userId
-        Long id = blog.getId();
-        Long userId = UserHolder.getUser().getId();
-
-        //判断当前用户是否点赞过
-        Double isLiked = stringRedisTemplate.opsForZSet().score(RedisConstants.LIKE_BLOG_KEY + id, userId.toString());
-
-        //点赞过则将属性设置为true
-        if(isLiked != null){
-            blog.setIsLike(true);
-        }
-    }
-
     @Override
     public Result likeBlog(Long id) {
         //1.查询当前博客
@@ -139,5 +154,36 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         }
 
         return Result.ok(blog);
+    }
+
+    /**
+     * 查询点赞排行
+     * @param id  要查询的博客id
+     * @return    点赞前5名
+     */
+    @Override
+    public Result queryLikesById(Long id) {
+        //1.查询该博客信息
+        Blog blog = getById(id);
+
+        //2.存在,去获取ZSet中的数据
+        Set<String> range = stringRedisTemplate.opsForZSet().range(RedisConstants.LIKE_BLOG_KEY + id, 0, 4);
+
+        //判断是否为空
+        if(range == null || range.isEmpty()){
+            return Result.ok(Collections.EMPTY_LIST);
+        }
+
+        //3.解析出range中的id
+        List<Long> ids = range.stream().map(Long::valueOf).collect(Collectors.toList());
+
+        //4.根据id去查找用户
+        List<UserDTO> userDTOS = userService.listByIds(ids)
+                .stream()
+                .map(user -> BeanUtil.copyProperties(user, UserDTO.class))
+                .collect(Collectors.toList());
+
+        return Result.ok(userDTOS );
+
     }
 }

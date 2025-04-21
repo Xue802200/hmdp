@@ -28,4 +28,11 @@ public interface IBlogService extends IService<Blog> {
     修改点赞数量
      */
     Result likeBlog(Long id);
+
+    /**
+     * 查看点赞排行
+     * @param id  要查询的博客id
+     * @return    点赞排行
+     */
+    Result queryLikesById(Long id);
 }
