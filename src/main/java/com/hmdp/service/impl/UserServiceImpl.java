@@ -14,6 +14,7 @@ import com.hmdp.service.IUserService;
 import com.hmdp.constant.RedisConstants;
 import com.hmdp.utils.RegexUtils;
 import com.hmdp.constant.SystemConstants;
+import com.hmdp.utils.TokenHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -106,6 +107,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
         //7.返回token给前端
         return Result.ok(token);
+    }
+
+
+    @Override
+    public Result logout() {
+        //login:user:token
+        String token = TokenHolder.getToken();
+
+        //删除缓存
+        Boolean result = stringRedisTemplate.delete(RedisConstants.LOGIN_USER_KEY + token);
+
+        System.out.println(result);
+
+        return Result.ok("用户退出成功!");
     }
 
     /*

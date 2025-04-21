@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.hmdp.constant.RedisConstants;
 import com.hmdp.dto.UserDTO;
+import com.hmdp.utils.TokenHolder;
 import com.hmdp.utils.UserHolder;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -36,6 +37,9 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         //1.获取请求头中的token
         String token = request.getHeader("authorization");
+
+        //将token保存进线程当中
+        TokenHolder.saveToken(token);
 
         //2.如果未携带token,直接放行即可
         if(StrUtil.isBlank(token)){

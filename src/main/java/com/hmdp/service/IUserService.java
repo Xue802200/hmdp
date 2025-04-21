@@ -32,4 +32,10 @@ public interface IUserService extends IService<User> {
      * @return
      */
     Result login(LoginFormDTO loginForm, HttpSession session);
+
+    /**
+     * 用户退出
+     * @return  将缓存删除
+     */
+    Result logout();
 }
