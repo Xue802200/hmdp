@@ -65,7 +65,8 @@ public class UserController {
      */
     @PostMapping("/logout")
     public Result logout(){
-        return userService.logout();
+        //return userService.logout();
+        return Result.fail("功能未完成");
     }
 
     /**
