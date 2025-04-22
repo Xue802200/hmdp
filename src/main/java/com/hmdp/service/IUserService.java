@@ -38,4 +38,9 @@ public interface IUserService extends IService<User> {
      * @return  将缓存删除
      */
     Result logout();
+
+    /*
+    根据id查询用户信息
+     */
+    Result queryById(Long id);
 }

@@ -72,4 +72,15 @@ public class BlogController {
     public Result queryLikesById(@PathVariable("id") Long id) {
         return blogService.queryLikesById(id);
     }
+
+    /**
+     * 分页查询用户的blog
+     * @param id        要查询的用户的id
+     * @param current   当前的页数
+     * @return          list集合封装符合数据的blog
+     */
+    @GetMapping("/of/user")
+    public Result pageQueryBlog(@RequestParam("id") Long id,@RequestParam(value = "current" , defaultValue = "1") Integer current) {
+        return blogService.pageQueryBlog(id,current);
+    }
 }

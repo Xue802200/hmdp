@@ -35,4 +35,6 @@ public interface IBlogService extends IService<Blog> {
      * @return    点赞排行
      */
     Result queryLikesById(Long id);
+
+    Result pageQueryBlog(Long id, Integer current);
 }

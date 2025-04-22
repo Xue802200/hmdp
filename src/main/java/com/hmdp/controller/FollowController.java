@@ -40,4 +40,15 @@ public class FollowController {
     public Result whetherFollow(@PathVariable Long id) {
         return followService.whetherFollow(id);
     }
+
+
+    /**
+     * 查询共同关注的用户
+     * @param id    查询用户的id
+     * @return      共同关注的人
+     */
+    @GetMapping("/common/{id}")
+    public Result mutualFollow(@PathVariable("id") Long id) {
+        return followService.mutualFollow(id);
+    }
 }

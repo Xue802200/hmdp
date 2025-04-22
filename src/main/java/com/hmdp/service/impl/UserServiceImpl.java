@@ -123,6 +123,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         return Result.ok("用户退出成功!");
     }
 
+
+
+    @Override
+    public Result queryById(Long id) {
+        User user = getById(id);
+        return Result.ok(BeanUtil.copyProperties(user, UserDTO.class));
+    }
+
+
+
     /*
     注册用户,将用户信息保存到数据库当中
      */

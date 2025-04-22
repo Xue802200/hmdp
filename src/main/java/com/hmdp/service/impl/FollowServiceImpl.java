@@ -1,16 +1,25 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.hmdp.dto.Result;
+import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Follow;
+import com.hmdp.entity.User;
 import com.hmdp.mapper.FollowMapper;
 import com.hmdp.service.IFollowService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.service.IUserService;
 import com.hmdp.utils.UserHolder;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.Resource;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -22,43 +31,36 @@ import java.util.List;
  */
 @Service
 public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> implements IFollowService {
+    @Resource
+    private IUserService userService;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
+    /*
+    判断是否关注了id的用户
+     */
     @Override
     public Result whetherFollow(Long id) {
         Long currentUserId = UserHolder.getUser().getId();
 
-        //1.根据id查找数据库信息
-        List<Follow> followList = query().eq("id", id)
-                                        .eq("follow_user_id", currentUserId)
-                                        .list();
+        //缓存中查找
+        Set<String> ids = stringRedisTemplate.opsForSet().members("follow:user:" + currentUserId);
 
-        //followList为空,直接返回错误
-        if(followList.isEmpty()){
+        if(ids == null || ids.isEmpty()) {
             return Result.ok(false);
         }
 
+        //判断id是否在ids之内
+        List<Long> idsList = ids.stream().map(Long::valueOf).collect(Collectors.toList());
 
-        //2.遍历集合,判断followUserId是否和当前用户的id相同
-        for (Follow follow : followList) {
-            if(follow.getFollowUserId().equals(currentUserId)){
-                return Result.ok(true);
-            }
+        if(idsList.contains(id)) {
+            //包含了说明关注了,返回true
+            return Result.ok(true);
         }
 
-        //3.到这说明list中关注的人没有当前用户,返回false
+        //不包含,返回false
         return Result.ok(false);
     }
-
-//    @Override
-//    public Result whetherFollow(Long id) {
-//        Long userId = UserHolder.getUser().getId();
-//        //1.根据id查找数据库信息
-//        Integer count = query().eq("user_id", id).eq("follow_user_id", userId).count();
-//
-//        return Result.ok(count > 0);
-//
-//
-//    }
 
 
     /*
@@ -75,7 +77,14 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
             followQuery.eq("follow_user_id", userId);
             followQuery.eq("user_id",id);
 
-            remove(followQuery);
+            boolean remove = remove(followQuery);
+
+            if(remove){
+                //follow:user:userId  保存关注人的id
+                //将缓存中的数据删除
+                stringRedisTemplate.opsForSet().remove("follow:user:" + userId, id.toString());
+
+            }
 
             return Result.ok("取关成功!");
         }
@@ -87,8 +96,94 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
                 .createTime(LocalDateTime.now()).build();
 
         //向数据库插入信息
-        save(follow);
+        boolean save = save(follow);
+
+        if(save){
+            //向缓存中添加数据
+            stringRedisTemplate.opsForSet().add("follow:user:" + userId , id.toString());
+
+        }
 
         return Result.ok("关注成功!");
     }
+
+    /*
+    查找共同关注的人
+     */
+    @Override
+    public Result mutualFollow(Long id) {
+        //当前用户id
+        Long userId = UserHolder.getUser().getId();
+
+        //获取共同关注人的id
+        String key1= "follow:user:" + userId;
+        String key2= "follow:user:" + id;
+        Set<String> shareId = stringRedisTemplate.opsForSet().intersect(key1, key2);
+
+        //判断是否存在
+        if(shareId == null || shareId.isEmpty()){
+            //不存在返回空就好
+            return null;
+        }
+
+        //存在,将id提取出来
+        List<Long> ids = shareId.stream().map(Long::valueOf).collect(Collectors.toList());
+
+        //根据id获取用户信息
+        List<User> users = userService.listByIds(ids);
+
+        //转为DTO
+        List<UserDTO> userDTOS = new ArrayList<>();
+        for(User user : users){
+            UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
+            userDTOS.add(userDTO);
+        }
+
+        //返回
+        return Result.ok(userDTOS);
+    }
+
+
+//    @Override
+//    public Result mutualFollow(Long id) {
+//        Long currentUserId = UserHolder.getUser().getId();
+//        //1.查询该用户是否关注过其他人
+//        List<Follow> followList1 = query().eq("follow_user_id", id).list();
+//
+//        //要查询用户的所有关注人id
+//        List<Long> followUserIds = followList1.stream().map(Follow::getFollowUserId).collect(Collectors.toList());
+//
+//        //2.判断
+//        if(followList1.isEmpty()){
+//            return Result.ok("该用户未关注其他人");
+//        }
+//
+//        //3.存在的话,根据当前用户id查找是否关注过用户
+//        List<Follow> followList = query().eq("follow_user_id", currentUserId).list();
+//
+//        //当前用户所有的关注人id
+//        List<Long> currentUserFollows = followList.stream().map(Follow::getFollowUserId).collect(Collectors.toList());
+//
+//        if(followList.isEmpty()){
+//            return Result.ok("您未关注过用户!");
+//        }
+//
+//        //4.查找是否有共同关注的人
+//        List<Long> commons = currentUserFollows.stream()
+//                .filter(followUserIds::contains)
+//                .collect(Collectors.toList());
+//
+//        //5.根据id去查找对应的用户信息
+//        List<User> users = userService.listByIds(commons);
+//
+//        //转化为DTO
+//        List<UserDTO> userDTOS = new ArrayList<>();
+//        for (User user : users) {
+//            UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
+//            userDTOS.add(userDTO);
+//        }
+//
+//        //返回
+//        return Result.ok(userDTOS);
+//    }
 }
