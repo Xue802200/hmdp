@@ -74,8 +74,8 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
         if(!status){
             //将数据库中的信息删除掉
             QueryWrapper<Follow> followQuery = new QueryWrapper<>();
-            followQuery.eq("follow_user_id", userId);
-            followQuery.eq("user_id",id);
+            followQuery.eq("follow_user_id", id);
+            followQuery.eq("user_id",userId);
 
             boolean remove = remove(followQuery);
 
@@ -91,8 +91,8 @@ public class FollowServiceImpl extends ServiceImpl<FollowMapper, Follow> impleme
 
         //没有关注,执行关注操作
         Follow follow = Follow.builder()
-                .followUserId(userId)
-                .userId(id)
+                .followUserId(id)  //关注用户的id
+                .userId(userId)    //当前用户id
                 .createTime(LocalDateTime.now()).build();
 
         //向数据库插入信息

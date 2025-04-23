@@ -37,4 +37,17 @@ public interface IBlogService extends IService<Blog> {
     Result queryLikesById(Long id);
 
     Result pageQueryBlog(Long id, Integer current);
+
+    /*
+    保存博客
+     */
+    Result saveBlog(Blog blog);
+
+    /**
+     * 查询关注者的博客信息
+     * @param timeStamp  当前时间戳
+     * @param offset    偏移量
+     * @return          offset和上一次查询的最大值stamp,
+     */
+    Result queryFollowBlog(Long timeStamp, Integer offset);
 }

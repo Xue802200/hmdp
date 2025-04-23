@@ -1,29 +1,28 @@
 package com.hmdp.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.util.BooleanUtil;
-import com.baomidou.mybatisplus.extension.conditions.update.UpdateChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hmdp.constant.RedisConstants;
 import com.hmdp.constant.SystemConstants;
 import com.hmdp.dto.Result;
+import com.hmdp.dto.ScrollDTO;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Blog;
+import com.hmdp.entity.Follow;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.BlogMapper;
 import com.hmdp.service.IBlogService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.service.IFollowService;
 import com.hmdp.service.IUserService;
 import com.hmdp.utils.UserHolder;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * <p>
@@ -37,6 +36,8 @@ import java.util.stream.Stream;
 public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IBlogService {
     @Resource
     private IUserService userService;
+    @Resource
+    private IFollowService followService;
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
@@ -166,6 +167,10 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         //1.查询该博客信息
         Blog blog = getById(id);
 
+        if(blog==null){
+            return Result.fail("博客不存在!");
+        }
+
         //2.存在,去获取ZSet中的数据
         Set<String> range = stringRedisTemplate.opsForZSet().range(RedisConstants.LIKE_BLOG_KEY + id, 0, 4);
 
@@ -198,5 +203,90 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         List<Blog> records = blogs.getRecords();
 
         return Result.ok(records);
+    }
+
+    @Override
+    public Result saveBlog(Blog blog) {
+        //1.获取登录用户
+        UserDTO user = UserHolder.getUser();
+        blog.setUserId(user.getId());
+
+        //2.保存探店博文
+        save(blog);
+
+        //3.获取粉丝id
+        List<Follow> followList = followService.query().eq("follow_user_id", user.getId()).list();
+
+        if(followList != null && !followList.isEmpty()){
+            for(Follow follow : followList){
+                //4.将博客信息发送到粉丝的收件箱中   feed:粉丝id
+                String key = "feed:" + follow.getUserId();
+                stringRedisTemplate.opsForZSet().add(key,blog.getId().toString(),System.currentTimeMillis());
+            }
+
+        }
+
+        //5.返回id
+        return Result.ok(blog.getId());
+    }
+
+    /**
+     * 关注推流
+     * @param timeStamp  当前时间戳
+     * @param offset    偏移量
+     * @return          offset最大score的数量   maxScore的最大值   List<Blog>
+     */
+    @Override
+    public Result queryFollowBlog(Long timeStamp, Integer offset) {
+        Long userId = UserHolder.getUser().getId();
+        String key = "feed:" + userId;
+
+        //1.判断缓存中是否存在数据
+        Long size = stringRedisTemplate.opsForZSet().size(key);
+        if(size == null || size == 0){
+            //没有说明关注的人没有发过blog
+            return null;
+        }
+
+        //2.在收件箱中拿取消息 ZREVRANGE timeStamp 0 limit offset 3    feed:currentID
+        Set<ZSetOperations.TypedTuple<String>> typedTuples = stringRedisTemplate.opsForZSet().reverseRangeByScoreWithScores(key, 0, timeStamp, offset, 3);
+
+        //3.对其为空进行判断
+        if(typedTuples == null || typedTuples.isEmpty()){
+            ////没有说明关注的人没有发过blog
+            return null;
+        }
+
+        //4.解析保存在缓存中的id和score
+        List<Blog> blogs = new ArrayList<>();
+        List<Double> scoreList = new ArrayList<>();
+        for(ZSetOperations.TypedTuple<String> typedTuple : typedTuples){
+            String blogId = typedTuple.getValue();
+            Double score = typedTuple.getScore();
+            Blog blog = getById(blogId);
+            blogs.add(blog);
+            scoreList.add(score);
+        }
+
+        //5.获取当前查询获取到的score最大值max 和最大值对应的数目
+        List<Long> scoreListLong = scoreList.stream().map(Double::longValue).collect(Collectors.toList());   //将Double值转化为Long值
+        scoreList.sort(Collections.reverseOrder());  //将集合进行降序排序
+
+        //获取最大数的数量
+        long max = scoreListLong.stream()
+                .filter(score -> score.equals(Collections.max(scoreListLong)))
+                .count();
+        Integer count = (int) max;
+
+        //5.封装返回对象
+        ScrollDTO scrollDTO = ScrollDTO.builder()
+                .List(blogs)
+                .Offset(count)
+                .MinTime(Collections.max(scoreListLong))
+                .build();
+
+
+        //6.返回给前端
+        return Result.ok(scrollDTO);
     }
 }
