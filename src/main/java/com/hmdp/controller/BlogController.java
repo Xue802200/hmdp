@@ -28,11 +28,21 @@ public class BlogController {
     @Resource
     private IBlogService blogService;
 
+    /**
+     * 写博客
+     * @param blog  博客的实体类
+     * @return      String
+     */
     @PostMapping
     public Result saveBlog(@RequestBody Blog blog) {
         return blogService.saveBlog(blog);
     }
 
+    /**
+     * 进行博客点赞/取消点赞
+     * @param id
+     * @return
+     */
     @PutMapping("/like/{id}")
     public Result likeBlog(@PathVariable("id") Long id) {
         return blogService.likeBlog(id);
